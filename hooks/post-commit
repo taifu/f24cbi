@@ -1,0 +1,37 @@
+#!/bin/sh
+# Copia in Dropbox la versione committata di f24cbi.py, così gli altri PC
+# ricevono solo versioni già nel repository.
+#
+# Attivazione, una volta per clone:  git config core.hooksPath hooks
+#
+# Se la copia in Dropbox ha un contenuto che git non conosce (modificata a
+# mano), non la sovrascrive e avvisa.
+
+set -eu
+
+src=f24cbi.py
+dest="$HOME/Dropbox/bin/f24cbi.py"
+
+git cat-file -e "HEAD:$src" 2>/dev/null || exit 0
+
+if [ -L "$dest" ]; then
+    echo "post-commit: $dest e' un link simbolico, non lo tocco" >&2
+    exit 0
+fi
+
+if [ -e "$dest" ]; then
+    hash=$(git hash-object "$dest")
+    [ "$hash" = "$(git rev-parse "HEAD:$src")" ] && exit 0
+    if [ "$(git cat-file -t "$hash" 2>/dev/null)" != blob ]; then
+        echo "post-commit: $dest e' stato modificato fuori da git, non lo sovrascrivo." >&2
+        echo "post-commit: confrontalo con $src, poi cancellalo e rilancia hooks/post-commit" >&2
+        exit 0
+    fi
+fi
+
+mkdir -p "$(dirname "$dest")"
+tmp="$dest.tmp.$$"
+git show "HEAD:$src" > "$tmp"
+chmod 755 "$tmp"
+mv "$tmp" "$dest"
+echo "post-commit: copiato $src in $dest" >&2
